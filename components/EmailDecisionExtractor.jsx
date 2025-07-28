@@ -313,6 +313,9 @@ const EmailDecisionExtractor = () => {
   // CARICAMENTO EMAIL CON NUOVA API
   const loadEmails = async (token = accessToken) => {
     console.log('📧 Caricamento email...')
+    console.log('📧 Token disponibile:', !!token)
+    console.log('📧 Token (primi 20 char):', token ? token.substring(0, 20) + '...' : 'MANCANTE')
+    
     try {
       setIsLoading(true)
       
@@ -321,6 +324,7 @@ const EmailDecisionExtractor = () => {
       }
 
       // Configura headers per Gmail API
+      console.log('🔧 Configurazione Google API Client...')
       window.gapi.client.setApiKey(GOOGLE_CONFIG.apiKey)
       window.gapi.client.setToken({ access_token: token })
       
@@ -352,6 +356,7 @@ const EmailDecisionExtractor = () => {
       }
       
       console.log('🔍 Query Gmail:', query)
+      console.log('🔍 Periodo selezionato:', selectedPeriod)
       
       const response = await window.gapi.client.gmail.users.messages.list({
         userId: 'me',
@@ -359,18 +364,23 @@ const EmailDecisionExtractor = () => {
         q: query
       })
       
-      console.log('📧 Risposta Gmail:', response)
+      console.log('📧 Risposta Gmail completa:', response)
+      console.log('📧 Status risposta:', response.status)
+      console.log('📧 Messaggi trovati:', response.result?.messages?.length || 0)
       
       if (response.result.messages && response.result.messages.length > 0) {
         console.log(`📧 Trovate ${response.result.messages.length} email`)
+        console.log('📧 Prima email ID:', response.result.messages[0].id)
         
         const emailPromises = response.result.messages.slice(0, 10).map(async (message) => {
           try {
+            console.log(`📧 Caricamento dettagli email: ${message.id}`)
             const emailDetail = await window.gapi.client.gmail.users.messages.get({
               userId: 'me',
               id: message.id,
               format: 'full'
             })
+            console.log(`✅ Email ${message.id} caricata:`, emailDetail.result.snippet?.substring(0, 50))
             return parseEmailData(emailDetail.result)
           } catch (error) {
             console.error('❌ Errore caricamento email:', message.id, error)
@@ -380,24 +390,28 @@ const EmailDecisionExtractor = () => {
         
         const emails = (await Promise.all(emailPromises)).filter(email => email !== null)
         console.log(`✅ Email elaborate: ${emails.length}`)
+        console.log('📧 Email elaborate:', emails.map(e => ({ subject: e.subject, sender: e.sender, decision: !!e.decision })))
         
         setRealEmails(emails)
         filterEmails(emails)
       } else {
-        console.log('📧 Nessuna email trovata')
+        console.log('📧 Nessuna email trovata nel periodo specificato')
+        console.log('📧 Response result:', response.result)
         setRealEmails([])
         setFilteredEmails([])
       }
       
     } catch (error) {
-      console.error('❌ Errore caricamento email:', error)
+      console.error('❌ Errore caricamento email completo:', error)
+      console.error('❌ Errore message:', error.message)
+      console.error('❌ Errore status:', error.status)
       setAuthError(`Errore caricamento email: ${error.message}`)
     } finally {
       setIsLoading(false)
     }
   }
 
-  // PARSER EMAIL (stesso di prima)
+  // PARSER EMAIL (aggiornato per nuove categorie)
   const parseEmailData = (emailData) => {
     const headers = emailData.payload.headers
     const getHeader = (name) => headers.find(h => h.name === name)?.value || ''
@@ -409,6 +423,9 @@ const EmailDecisionExtractor = () => {
     const senderMatch = fromHeader.match(/^(.+?)\s*<(.+?)>$/) || fromHeader.match(/^(.+)$/)
     const senderName = senderMatch ? senderMatch[1]?.replace(/"/g, '').trim() : fromHeader
     const senderEmail = senderMatch && senderMatch[2] ? senderMatch[2] : fromHeader
+    
+    // Nuova categorizzazione intelligente
+    const emailAnalysis = extractDecisionFromEmail(emailData.snippet, getHeader('Subject'), senderEmail)
     
     return {
       id: emailData.id,
@@ -423,11 +440,13 @@ const EmailDecisionExtractor = () => {
       isUnread: emailData.labelIds?.includes('UNREAD') || false,
       isImportant: emailData.labelIds?.includes('IMPORTANT') || false,
       body: extractEmailBody(emailData.payload),
-      priority: Math.random() > 0.7 ? 'high' : Math.random() > 0.4 ? 'medium' : 'low',
-      decision: extractDecisionFromEmail(emailData.snippet, getHeader('Subject')),
-      status: Math.random() > 0.6 ? 'decided' : Math.random() > 0.3 ? 'pending_confirmation' : 'in_progress',
-      context: `Thread di ${Math.floor(Math.random() * 10) + 1} email`,
-      keyParticipants: [senderName, 'Tu', 'Altri']
+      // Nuovi campi per categorizzazione
+      priority: emailAnalysis.priority,
+      decision: emailAnalysis.text,
+      category: emailAnalysis.category,
+      status: emailAnalysis.category === 'business' ? 'pending_confirmation' : 'info',
+      context: `${emailAnalysis.category} - Thread di 1 email`,
+      keyParticipants: [senderName, 'Tu']
     }
   }
 
@@ -448,20 +467,82 @@ const EmailDecisionExtractor = () => {
     return body.substring(0, 500)
   }
 
-  const extractDecisionFromEmail = (snippet, subject) => {
-    const decisionKeywords = [
-      'approv', 'decid', 'confirm', 'budget', 'assun', 'contratt', 'accord', 'procedi',
-      'ok per', 'vai con', 'autorizza', 'implementa', 'lancia', 'sì', 'perfetto', 'confermo'
+  const extractDecisionFromEmail = (snippet, subject, sender) => {
+    const text = (snippet + ' ' + subject + ' ' + sender).toLowerCase()
+    
+    console.log('🤖 Categorizzazione email:', subject)
+    console.log('🤖 Da:', sender)
+    console.log('🤖 Snippet:', snippet.substring(0, 100))
+    
+    // CATEGORIA 1: EMAIL BUSINESS/IMPORTANTI
+    const businessKeywords = [
+      // Italiano
+      'meeting', 'riunione', 'call', 'chiamata', 'progetto', 'project', 'budget', 'contratto',
+      'assunzione', 'colloquio', 'cliente', 'fornitore', 'partnership', 'accordo', 'decisione',
+      'approv', 'confirm', 'urgent', 'importante', 'scadenza', 'deadline', 'fattura', 'pagamento',
+      
+      // Inglese
+      'approve', 'contract', 'invoice', 'payment', 'client', 'customer', 'supplier', 'vendor',
+      'partnership', 'agreement', 'urgent', 'important', 'deadline', 'schedule', 'appointment'
     ]
     
-    const text = (snippet + ' ' + subject).toLowerCase()
-    const hasDecision = decisionKeywords.some(keyword => text.includes(keyword))
+    // CATEGORIA 2: PROMOZIONI/OFFERTE
+    const promoKeywords = [
+      'sconto', 'offerta', 'promozione', 'sale', 'discount', 'offer', 'deal', 'limited time',
+      'fino a', 'until', 'black friday', 'cyber monday', 'special price', 'prezzo speciale',
+      'gratis', 'free', 'omaggio', 'gift', 'coupon', 'codice sconto', 'risparmia', 'save'
+    ]
     
-    if (hasDecision) {
-      return `Decisione identificata: ${snippet.substring(0, 80)}...`
+    // CATEGORIA 3: NEWSLETTER/AGGIORNAMENTI
+    const newsletterKeywords = [
+      'newsletter', 'aggiornamento', 'update', 'news', 'notizie', 'trend', 'mercato', 'market',
+      'report', 'analisi', 'insights', 'industry', 'settore', 'weekly', 'monthly', 'settimanale'
+    ]
+    
+    // Controlla se è da dominio aziendale/importante
+    const isBusinessSender = sender.includes('across.it') || sender.includes('syneton.it') || 
+                            sender.includes('@gmail.com') || sender.includes('@outlook.com') ||
+                            !sender.includes('noreply') && !sender.includes('no-reply')
+    
+    // CATEGORIZZAZIONE
+    let category = 'other'
+    let priority = 'low'
+    let decision = ''
+    
+    // Email Business (priorità alta)
+    if (businessKeywords.some(keyword => text.includes(keyword)) || isBusinessSender) {
+      category = 'business'
+      priority = 'high'
+      decision = `📋 Business: ${snippet.substring(0, 80)}...`
+      console.log('✅ Categoria: BUSINESS')
+    }
+    // Promozioni (priorità media)
+    else if (promoKeywords.some(keyword => text.includes(keyword))) {
+      category = 'promotion'
+      priority = 'medium'
+      decision = `🎯 Promozione: ${snippet.substring(0, 80)}...`
+      console.log('✅ Categoria: PROMOZIONE')
+    }
+    // Newsletter (priorità bassa)
+    else if (newsletterKeywords.some(keyword => text.includes(keyword))) {
+      category = 'newsletter'
+      priority = 'low'
+      decision = `📰 Newsletter: ${snippet.substring(0, 80)}...`
+      console.log('✅ Categoria: NEWSLETTER')
+    }
+    // Email generiche (mostra comunque)
+    else {
+      category = 'general'
+      priority = 'low'
+      decision = `📧 Email: ${snippet.substring(0, 80)}...`
+      console.log('✅ Categoria: GENERALE')
     }
     
-    return null
+    return {
+      text: decision,
+      category: category,
+      priority: priority
+    }
   }
 
   const filterEmails = (emails) => {
@@ -482,7 +563,11 @@ const EmailDecisionExtractor = () => {
       }
     })
     
-    filtered = filtered.filter(email => email.decision)
+    // TEMPORANEO: Mostra tutte le email (rimuovi filtro decisioni)
+    console.log('🔍 Email dopo filtro persona/status:', filtered.length)
+    console.log('🔍 Email con decisioni:', filtered.filter(email => email.decision).length)
+    
+    // Mostra tutte le email per debugging
     setFilteredEmails(filtered)
   }
 
@@ -493,8 +578,15 @@ const EmailDecisionExtractor = () => {
   }, [selectedPerson, selectedStatus, realEmails])
 
   useEffect(() => {
+    console.log('🔄 Periodo cambiato:', selectedPeriod)
+    console.log('🔄 Autenticato:', isAuthenticated)
+    console.log('🔄 Token presente:', !!accessToken)
+    
     if (isAuthenticated && accessToken) {
+      console.log('✅ Avvio caricamento email per periodo:', selectedPeriod)
       loadEmails()
+    } else {
+      console.log('❌ Non posso caricare email - mancano auth o token')
     }
   }, [selectedPeriod])
 
@@ -817,7 +909,7 @@ ${userProfile?.name || 'Sergio'}`
               <div className="space-y-4">
                 <div className="bg-white rounded-lg shadow p-6">
                   <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                    {t.decisionsRecap} - {selectedPeriod === 'today' ? t.today : 
+                    Recap Email Intelligente - {selectedPeriod === 'today' ? t.today : 
                                       selectedPeriod === 'yesterday' ? t.yesterday : 
                                       selectedPeriod === 'week' ? t.lastWeek : t.lastMonth}
                   </h2>
@@ -857,7 +949,11 @@ ${userProfile?.name || 'Sergio'}`
                               </div>
                               
                               <div className="bg-blue-50 p-3 rounded-lg mb-3">
-                                <p className="font-medium text-blue-900 text-sm">{t.identifiedDecision}</p>
+                                <p className="font-medium text-blue-900 text-sm">
+                                  {email.category === 'business' ? '📋 Email Business' :
+                                   email.category === 'promotion' ? '🎯 Promozione' :
+                                   email.category === 'newsletter' ? '📰 Newsletter' : '📧 Email'}
+                                </p>
                                 <p className="text-blue-800">{email.decision}</p>
                               </div>
                               
