@@ -176,10 +176,23 @@ const EmailDecisionExtractor = () => {
 
       if (typeof window !== 'undefined' && window.gapi) {
         try {
+          console.log('🔧 Caricamento moduli gapi...')
           await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              reject(new Error('Timeout caricamento gapi.load'))
+            }, 10000)
+            
             window.gapi.load('client:auth2', {
-              callback: resolve,
-              onerror: reject
+              callback: () => {
+                clearTimeout(timeout)
+                console.log('✅ Moduli gapi caricati')
+                resolve()
+              },
+              onerror: (error) => {
+                clearTimeout(timeout)
+                console.error('❌ Errore caricamento moduli:', error)
+                reject(error)
+              }
             })
           })
 
@@ -211,17 +224,15 @@ const EmailDecisionExtractor = () => {
         } catch (error) {
           console.error('❌ Errore inizializzazione completo:', error)
           console.error('❌ Errore message:', error.message)
-          console.error('❌ Errore details:', JSON.stringify(error))
+          console.error('❌ Errore stack:', error.stack)
           
           let errorMessage = 'Errore inizializzazione'
           if (error.message) {
             errorMessage += `: ${error.message}`
           } else if (error.error) {
             errorMessage += `: ${error.error}`
-          } else if (error.details) {
-            errorMessage += `: ${error.details}`
           } else {
-            errorMessage += `: ${typeof error === 'string' ? error : 'Errore sconosciuto'}`
+            errorMessage += ': Errore sconosciuto durante il caricamento Google API'
           }
           
           setAuthError(errorMessage)
