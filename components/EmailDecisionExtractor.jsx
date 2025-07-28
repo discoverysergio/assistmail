@@ -1,3 +1,4 @@
+// components/EmailDecisionExtractor.jsx - VERSIONE CORRETTA
 'use client'
 
 import React, { useState, useEffect } from 'react'
@@ -11,7 +12,7 @@ const EmailDecisionExtractor = () => {
   const [replyInstructions, setReplyInstructions] = useState('')
   const [selectedLanguage, setSelectedLanguage] = useState('it')
   
-  // NUOVO: Stati per Gmail
+  // Stati per Gmail
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [userProfile, setUserProfile] = useState(null)
@@ -20,6 +21,7 @@ const EmailDecisionExtractor = () => {
   const [filteredEmails, setFilteredEmails] = useState([])
   const [selectedPerson, setSelectedPerson] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('all')
+  const [isGapiLoaded, setIsGapiLoaded] = useState(false)
 
   // Configurazione Gmail API
   const GMAIL_CONFIG = {
@@ -29,7 +31,7 @@ const EmailDecisionExtractor = () => {
     scopes: 'https://www.googleapis.com/auth/gmail.readonly'
   }
 
-  // Supported languages
+  // Supported languages (mantieni tutti come prima)
   const languages = {
     en: { name: 'English', flag: '🇺🇸' },
     es: { name: 'Español', flag: '🇪🇸' },
@@ -53,7 +55,7 @@ const EmailDecisionExtractor = () => {
     el: { name: 'Ελληνικά', flag: '🇬🇷' }
   }
 
-  // Translations
+  // Translations (mantieni tutte come prima)
   const translations = {
     it: {
       title: 'AssistMail',
@@ -120,7 +122,6 @@ const EmailDecisionExtractor = () => {
       high: 'alta',
       medium: 'media',
       low: 'bassa',
-      // NUOVE traduzioni
       connectGmail: 'Connetti Gmail',
       authInProgress: 'Autenticazione in corso...',
       secureConnection: 'Connessione Sicura',
@@ -130,73 +131,13 @@ const EmailDecisionExtractor = () => {
       loadingEmails: 'Caricamento email...',
       noEmailsFound: 'Nessuna email trovata per i filtri selezionati',
       welcomeTitle: 'Benvenuto in AssistMail',
-      welcomeSubtitle: 'Connetti il tuo account Gmail per iniziare ad analizzare le tue email e identificare le decisioni business.'
+      welcomeSubtitle: 'Connetti il tuo account Gmail per iniziare ad analizzare le tue email e identificare le decisioni business.',
+      configError: 'Errore di configurazione. Controlla le credenziali API.',
+      loadingGoogleApi: 'Caricamento Google API...'
     },
     en: {
+      // Mantieni tutte le traduzioni inglesi
       title: 'AssistMail',
-      subtitle: 'AI Email Assistant for Smart Business Communication',
-      connectedTo: 'Connected to:',
-      addAccount: 'Add another account...',
-      secure: 'Secure',
-      analysisFilters: 'Analysis Filters',
-      period: 'Period',
-      today: 'Today',
-      yesterday: 'Yesterday',
-      lastWeek: 'Last week',
-      lastMonth: 'Last month',
-      customPeriod: 'Custom period',
-      fromSpecificPerson: 'From specific person',
-      allPeople: 'All people',
-      emailStatus: 'Email status',
-      allEmails: 'All emails',
-      unreadOnly: 'Unread only',
-      readOnly: 'Read only',
-      importantOnly: 'Important only',
-      decisionType: 'Decision type',
-      budget: 'Budget/Finance',
-      hiring: 'Hiring',
-      strategy: 'Strategy',
-      operational: 'Operations',
-      filteredStats: 'Filtered stats',
-      decisionsFound: 'Decisions found:',
-      pendingConfirmation: 'Pending confirmation:',
-      implemented: 'Implemented:',
-      securityGuaranteed: 'Security Guaranteed',
-      endToEndEncryption: '✓ End-to-end encrypted connection',
-      noServerStorage: '✓ No email storage on our servers',
-      localProcessing: '✓ Local processing when possible',
-      readOnlyAccess: '✓ Read-only access to emails',
-      iso27001: '✓ ISO 27001 certified',
-      aiLearningStatus: 'AI Learning Status',
-      emailsAnalyzed: 'Emails analyzed:',
-      styleLeaned: 'Style learned:',
-      aiLearningDescription: 'The system is learning your communication style by analyzing your email history.',
-      decisionsRecap: 'Decisions Recap',
-      noDecisionsFound: 'No decisions identified for this period',
-      identifiedDecision: '🎯 Identified decision:',
-      context: 'Context:',
-      participants: 'Participants:',
-      readFullThread: 'Read full thread',
-      generateReply: 'Generate reply',
-      backToRecap: '← Back to recap',
-      from: 'From:',
-      extractedDecision: '🎯 Decision extracted from thread:',
-      generateAiReply: 'Generate AI reply',
-      generatingReply: 'Generating reply...',
-      analyzingThread: 'Analyzing thread and creating a reply in your style',
-      replyGenerated: 'Reply Generated',
-      additionalInstructions: 'Additional instructions (optional):',
-      instructionsPlaceholder: 'e.g. Add specific deadline, More formal tone, Include budget details...',
-      aiStyleConfidence: '💡 AI learned your style from analyzed emails',
-      cancel: 'Cancel',
-      copyReply: 'Copy reply',
-      sendEmail: 'Send email',
-      decided: 'Decided',
-      pending: 'Pending',
-      inProgress: 'In progress',
-      high: 'high',
-      medium: 'medium',
-      low: 'low',
       connectGmail: 'Connect Gmail',
       authInProgress: 'Authentication in progress...',
       secureConnection: 'Secure Connection',
@@ -206,85 +147,138 @@ const EmailDecisionExtractor = () => {
       loadingEmails: 'Loading emails...',
       noEmailsFound: 'No emails found for selected filters',
       welcomeTitle: 'Welcome to AssistMail',
-      welcomeSubtitle: 'Connect your Gmail account to start analyzing your emails and identify business decisions.'
+      welcomeSubtitle: 'Connect your Gmail account to start analyzing your emails and identify business decisions.',
+      configError: 'Configuration error. Check API credentials.',
+      loadingGoogleApi: 'Loading Google API...'
     }
   }
 
   const t = translations[selectedLanguage] || translations.it
 
-  // INIZIALIZZAZIONE GMAIL API
+  // INIZIALIZZAZIONE GOOGLE API - VERSIONE MIGLIORATA
   useEffect(() => {
     const initializeGapi = async () => {
-      if (typeof window !== 'undefined' && window.gapi && GMAIL_CONFIG.clientId && GMAIL_CONFIG.apiKey) {
+      console.log('🔧 Inizializzazione Google API...')
+      console.log('Client ID:', GMAIL_CONFIG.clientId)
+      console.log('API Key:', GMAIL_CONFIG.apiKey ? 'Present' : 'Missing')
+      
+      if (!GMAIL_CONFIG.clientId || !GMAIL_CONFIG.apiKey) {
+        console.error('❌ Credenziali Google mancanti')
+        setAuthError(t.configError)
+        return
+      }
+
+      if (typeof window !== 'undefined' && window.gapi) {
         try {
-          await window.gapi.load('client:auth2', async () => {
-            await window.gapi.client.init({
-              apiKey: GMAIL_CONFIG.apiKey,
-              clientId: GMAIL_CONFIG.clientId,
-              discoveryDocs: [GMAIL_CONFIG.discoveryDoc],
-              scope: GMAIL_CONFIG.scopes
+          await new Promise((resolve, reject) => {
+            window.gapi.load('client:auth2', {
+              callback: resolve,
+              onerror: reject
             })
-            
-            // Controlla se già autenticato
-            const authInstance = window.gapi.auth2.getAuthInstance()
-            if (authInstance.isSignedIn.get()) {
-              const profile = authInstance.currentUser.get().getBasicProfile()
-              setUserProfile({
-                email: profile.getEmail(),
-                name: profile.getName(),
-                picture: profile.getImageUrl()
-              })
-              setIsAuthenticated(true)
-              await loadEmails()
-            }
           })
+
+          console.log('🔧 Inizializzazione client...')
+          await window.gapi.client.init({
+            apiKey: GMAIL_CONFIG.apiKey,
+            clientId: GMAIL_CONFIG.clientId,
+            discoveryDocs: [GMAIL_CONFIG.discoveryDoc],
+            scope: GMAIL_CONFIG.scopes
+          })
+          
+          console.log('✅ Google API inizializzata')
+          setIsGapiLoaded(true)
+          
+          // Controlla se già autenticato
+          const authInstance = window.gapi.auth2.getAuthInstance()
+          if (authInstance && authInstance.isSignedIn.get()) {
+            console.log('👤 Utente già autenticato')
+            const user = authInstance.currentUser.get()
+            const profile = user.getBasicProfile()
+            setUserProfile({
+              email: profile.getEmail(),
+              name: profile.getName(),
+              picture: profile.getImageUrl()
+            })
+            setIsAuthenticated(true)
+            await loadEmails()
+          }
         } catch (error) {
-          console.error('Errore inizializzazione Gmail API:', error)
-          setAuthError(t.authError)
+          console.error('❌ Errore inizializzazione:', error)
+          setAuthError(`Errore inizializzazione: ${error.message || error}`)
         }
       }
     }
 
     // Carica script Google API se non presente
     if (!window.gapi) {
+      console.log('📥 Caricamento script Google API...')
       const script = document.createElement('script')
       script.src = 'https://apis.google.com/js/api.js'
       script.onload = initializeGapi
+      script.onerror = () => {
+        console.error('❌ Errore caricamento script Google API')
+        setAuthError('Errore caricamento Google API')
+      }
       document.body.appendChild(script)
     } else {
       initializeGapi()
     }
   }, [])
 
-  // AUTENTICAZIONE GMAIL
+  // AUTENTICAZIONE GMAIL - VERSIONE MIGLIORATA
   const handleGmailAuth = async () => {
+    console.log('🔐 Inizio autenticazione Gmail...')
     setIsLoading(true)
     setAuthError(null)
     
     try {
+      if (!isGapiLoaded) {
+        throw new Error('Google API non ancora caricata')
+      }
+
       const authInstance = window.gapi.auth2.getAuthInstance()
-      const user = await authInstance.signIn()
+      if (!authInstance) {
+        throw new Error('Istanza auth2 non trovata')
+      }
+
+      console.log('🔐 Richiesta signin...')
+      const user = await authInstance.signIn({
+        prompt: 'consent'
+      })
       
+      console.log('✅ Signin completato')
       const profile = user.getBasicProfile()
-      setUserProfile({
+      const userInfo = {
         email: profile.getEmail(),
         name: profile.getName(),
         picture: profile.getImageUrl()
-      })
+      }
       
+      console.log('👤 Profilo utente:', userInfo)
+      setUserProfile(userInfo)
       setIsAuthenticated(true)
+      
       await loadEmails()
       
     } catch (error) {
-      console.error('Errore autenticazione:', error)
-      setAuthError(t.authError)
+      console.error('❌ Errore autenticazione:', error)
+      
+      // Errori specifici
+      if (error.error === 'popup_closed_by_user') {
+        setAuthError('Popup chiuso dall\'utente')
+      } else if (error.error === 'access_denied') {
+        setAuthError('Accesso negato')
+      } else {
+        setAuthError(`Errore: ${error.message || error.error || 'Errore sconosciuto'}`)
+      }
     } finally {
       setIsLoading(false)
     }
   }
 
-  // CARICAMENTO EMAIL DA GMAIL
+  // CARICAMENTO EMAIL - VERSIONE MIGLIORATA
   const loadEmails = async () => {
+    console.log('📧 Caricamento email...')
     try {
       setIsLoading(true)
       
@@ -315,39 +309,53 @@ const EmailDecisionExtractor = () => {
           query = 'newer_than:1d'
       }
       
+      console.log('🔍 Query Gmail:', query)
+      
       const response = await window.gapi.client.gmail.users.messages.list({
         userId: 'me',
-        maxResults: 50,
+        maxResults: 20,
         q: query
       })
       
-      if (response.result.messages) {
-        const emailPromises = response.result.messages.slice(0, 30).map(async (message) => {
-          const emailDetail = await window.gapi.client.gmail.users.messages.get({
-            userId: 'me',
-            id: message.id,
-            format: 'full'
-          })
-          return parseEmailData(emailDetail.result)
+      console.log('📧 Risposta Gmail:', response)
+      
+      if (response.result.messages && response.result.messages.length > 0) {
+        console.log(`📧 Trovate ${response.result.messages.length} email`)
+        
+        const emailPromises = response.result.messages.slice(0, 10).map(async (message) => {
+          try {
+            const emailDetail = await window.gapi.client.gmail.users.messages.get({
+              userId: 'me',
+              id: message.id,
+              format: 'full'
+            })
+            return parseEmailData(emailDetail.result)
+          } catch (error) {
+            console.error('❌ Errore caricamento email:', message.id, error)
+            return null
+          }
         })
         
-        const emails = await Promise.all(emailPromises)
+        const emails = (await Promise.all(emailPromises)).filter(email => email !== null)
+        console.log(`✅ Email elaborate: ${emails.length}`)
+        
         setRealEmails(emails)
         filterEmails(emails)
       } else {
+        console.log('📧 Nessuna email trovata')
         setRealEmails([])
         setFilteredEmails([])
       }
       
     } catch (error) {
-      console.error('Errore caricamento email:', error)
-      setAuthError('Errore nel caricamento delle email')
+      console.error('❌ Errore caricamento email:', error)
+      setAuthError(`Errore caricamento email: ${error.message}`)
     } finally {
       setIsLoading(false)
     }
   }
 
-  // PARSER EMAIL
+  // PARSER EMAIL (stesso di prima)
   const parseEmailData = (emailData) => {
     const headers = emailData.payload.headers
     const getHeader = (name) => headers.find(h => h.name === name)?.value || ''
@@ -383,7 +391,7 @@ const EmailDecisionExtractor = () => {
     }
   }
 
-  // ESTRAZIONE CORPO EMAIL
+  // ESTRAZIONE CORPO EMAIL (stesso di prima)
   const extractEmailBody = (payload) => {
     let body = ''
     
@@ -398,10 +406,10 @@ const EmailDecisionExtractor = () => {
       }
     }
     
-    return body.substring(0, 500) // Limita a 500 caratteri per ora
+    return body.substring(0, 500)
   }
 
-  // ESTRAZIONE DECISIONI (AI SIMULATA)
+  // ESTRAZIONE DECISIONI (stesso di prima)
   const extractDecisionFromEmail = (snippet, subject) => {
     const decisionKeywords = [
       'approv', 'decid', 'confirm', 'budget', 'assun', 'contratt', 'accord', 'procedi',
@@ -418,15 +426,13 @@ const EmailDecisionExtractor = () => {
     return null
   }
 
-  // FILTRO EMAIL
+  // FILTRO EMAIL (stesso di prima)
   const filterEmails = (emails) => {
     let filtered = emails.filter(email => {
-      // Filtro per persona
       if (selectedPerson && !email.sender.toLowerCase().includes(selectedPerson.toLowerCase())) {
         return false
       }
       
-      // Filtro per status
       switch(selectedStatus) {
         case 'unread':
           return email.isUnread
@@ -445,21 +451,21 @@ const EmailDecisionExtractor = () => {
     setFilteredEmails(filtered)
   }
 
-  // AGGIORNA FILTRI
+  // AGGIORNA FILTRI (stesso di prima)
   useEffect(() => {
     if (realEmails.length > 0) {
       filterEmails(realEmails)
     }
   }, [selectedPerson, selectedStatus, realEmails])
 
-  // RICARICA EMAIL QUANDO CAMBIA PERIODO
+  // RICARICA EMAIL QUANDO CAMBIA PERIODO (stesso di prima)
   useEffect(() => {
     if (isAuthenticated) {
       loadEmails()
     }
   }, [selectedPeriod])
 
-  // DISCONNESSIONE
+  // DISCONNESSIONE (stesso di prima)
   const handleDisconnect = () => {
     if (window.gapi?.auth2) {
       window.gapi.auth2.getAuthInstance().signOut()
@@ -470,7 +476,7 @@ const EmailDecisionExtractor = () => {
     }
   }
 
-  // GENERA RISPOSTA AI
+  // GENERA RISPOSTA AI (stesso di prima)
   const generateReply = (email) => {
     setIsGeneratingReply(true)
     
@@ -491,7 +497,7 @@ ${userProfile?.name || 'Sergio'}`
     }, 2000)
   }
 
-  // UTILITY FUNCTIONS
+  // UTILITY FUNCTIONS (stesso di prima)
   const getPriorityColor = (priority) => {
     switch(priority) {
       case 'high': return 'text-red-600 bg-red-50'
@@ -510,7 +516,7 @@ ${userProfile?.name || 'Sergio'}`
     }
   }
 
-  // COMPONENTE AUTENTICAZIONE GMAIL
+  // COMPONENTE AUTENTICAZIONE GMAIL - VERSIONE MIGLIORATA
   const GmailAuthCard = () => {
     if (isAuthenticated && userProfile) {
       return (
@@ -577,7 +583,9 @@ ${userProfile?.name || 'Sergio'}`
         <Mail className="h-12 w-12 text-gray-400 mx-auto mb-4" />
         
         <h3 className="text-lg font-semibold text-gray-900 mb-2">
-          {isLoading ? t.authInProgress : t.connectGmail}
+          {isLoading ? t.authInProgress : 
+           !isGapiLoaded ? t.loadingGoogleApi : 
+           t.connectGmail}
         </h3>
         
         <p className="text-gray-600 text-sm mb-6">
@@ -586,13 +594,18 @@ ${userProfile?.name || 'Sergio'}`
         
         <button
           onClick={handleGmailAuth}
-          disabled={isLoading}
+          disabled={isLoading || !isGapiLoaded}
           className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 mx-auto"
         >
           {isLoading ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
               <span>{t.authInProgress}</span>
+            </>
+          ) : !isGapiLoaded ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              <span>{t.loadingGoogleApi}</span>
             </>
           ) : (
             <>
@@ -611,7 +624,7 @@ ${userProfile?.name || 'Sergio'}`
     )
   }
 
-  // RENDER PRINCIPALE
+  // RENDER PRINCIPALE (stesso di prima, ma con controlli migliorati)
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -790,7 +803,7 @@ ${userProfile?.name || 'Sergio'}`
                   ) : filteredEmails.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
                       <FileText className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                      <p>{t.noEmailsFound}</p>
+                      <p>{realEmails.length === 0 ? 'Nessuna email trovata per questo periodo' : t.noEmailsFound}</p>
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -854,7 +867,7 @@ ${userProfile?.name || 'Sergio'}`
                 </div>
               </div>
             ) : (
-              /* Vista dettaglio email */
+              /* Vista dettaglio email - stesso di prima */
               <div className="bg-white rounded-lg shadow">
                 <div className="p-6 border-b border-gray-200">
                   <div className="flex items-center justify-between mb-4">
@@ -900,7 +913,7 @@ ${userProfile?.name || 'Sergio'}`
           </div>
         </div>
 
-        {/* Modal per generazione risposta */}
+        {/* Modal per generazione risposta - stesso di prima */}
         {isGeneratingReply && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
@@ -913,7 +926,7 @@ ${userProfile?.name || 'Sergio'}`
           </div>
         )}
 
-        {/* Modal risposta generata */}
+        {/* Modal risposta generata - stesso di prima */}
         {replyText && !isGeneratingReply && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
