@@ -1,4 +1,3 @@
-// components/EmailDecisionExtractor.jsx - VERSIONE CORRETTA
 'use client'
 
 import React, { useState, useEffect } from 'react'
@@ -21,17 +20,17 @@ const EmailDecisionExtractor = () => {
   const [filteredEmails, setFilteredEmails] = useState([])
   const [selectedPerson, setSelectedPerson] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('all')
-  const [isGapiLoaded, setIsGapiLoaded] = useState(false)
+  const [isGoogleLoaded, setIsGoogleLoaded] = useState(false)
+  const [accessToken, setAccessToken] = useState(null)
 
-  // Configurazione Gmail API
-  const GMAIL_CONFIG = {
+  // Configurazione Google Identity Services (NUOVA API)
+  const GOOGLE_CONFIG = {
     clientId: process.env.NEXT_PUBLIC_GMAIL_CLIENT_ID,
     apiKey: process.env.NEXT_PUBLIC_GMAIL_API_KEY,
-    discoveryDoc: 'https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest',
-    scopes: 'https://www.googleapis.com/auth/gmail.readonly'
+    scope: 'https://www.googleapis.com/auth/gmail.readonly',
+    discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/gmail/v1/rest']
   }
 
-  // Supported languages (mantieni tutti come prima)
   const languages = {
     en: { name: 'English', flag: '🇺🇸' },
     es: { name: 'Español', flag: '🇪🇸' },
@@ -55,7 +54,6 @@ const EmailDecisionExtractor = () => {
     el: { name: 'Ελληνικά', flag: '🇬🇷' }
   }
 
-  // Translations (mantieni tutte come prima)
   const translations = {
     it: {
       title: 'AssistMail',
@@ -136,7 +134,6 @@ const EmailDecisionExtractor = () => {
       loadingGoogleApi: 'Caricamento Google API...'
     },
     en: {
-      // Mantieni tutte le traduzioni inglesi
       title: 'AssistMail',
       connectGmail: 'Connect Gmail',
       authInProgress: 'Authentication in progress...',
@@ -155,176 +152,177 @@ const EmailDecisionExtractor = () => {
 
   const t = translations[selectedLanguage] || translations.it
 
-  // INIZIALIZZAZIONE GOOGLE API - VERSIONE MIGLIORATA
+  // INIZIALIZZAZIONE NUOVA GOOGLE IDENTITY SERVICES
   useEffect(() => {
-    const initializeGapi = async () => {
-      console.log('🔧 Inizializzazione Google API...')
-      console.log('Client ID:', GMAIL_CONFIG.clientId)
-      console.log('API Key:', GMAIL_CONFIG.apiKey ? 'Present' : 'Missing')
-      console.log('Client ID completo:', process.env.NEXT_PUBLIC_GMAIL_CLIENT_ID)
-      console.log('API Key completo:', process.env.NEXT_PUBLIC_GMAIL_API_KEY)
+    const initializeGoogleIdentity = async () => {
+      console.log('🆕 Inizializzazione Google Identity Services...')
+      console.log('Client ID:', GOOGLE_CONFIG.clientId)
+      console.log('API Key:', GOOGLE_CONFIG.apiKey ? 'Present' : 'Missing')
       
-      if (!GMAIL_CONFIG.clientId || !GMAIL_CONFIG.apiKey) {
+      if (!GOOGLE_CONFIG.clientId || !GOOGLE_CONFIG.apiKey) {
         const missingCredentials = []
-        if (!GMAIL_CONFIG.clientId) missingCredentials.push('Client ID')
-        if (!GMAIL_CONFIG.apiKey) missingCredentials.push('API Key')
+        if (!GOOGLE_CONFIG.clientId) missingCredentials.push('Client ID')
+        if (!GOOGLE_CONFIG.apiKey) missingCredentials.push('API Key')
         
         console.error('❌ Credenziali Google mancanti:', missingCredentials.join(', '))
         setAuthError(`Credenziali mancanti: ${missingCredentials.join(', ')}`)
         return
       }
 
-      if (typeof window !== 'undefined' && window.gapi) {
+      if (typeof window !== 'undefined') {
         try {
-          console.log('🔧 Caricamento moduli gapi...')
-          await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              reject(new Error('Timeout caricamento gapi.load'))
-            }, 10000)
-            
-            window.gapi.load('client:auth2', {
-              callback: () => {
-                clearTimeout(timeout)
-                console.log('✅ Moduli gapi caricati')
-                resolve()
-              },
-              onerror: (error) => {
-                clearTimeout(timeout)
-                console.error('❌ Errore caricamento moduli:', error)
-                reject(error)
-              }
-            })
-          })
-
-          console.log('🔧 Inizializzazione client...')
-          await window.gapi.client.init({
-            apiKey: GMAIL_CONFIG.apiKey,
-            clientId: GMAIL_CONFIG.clientId,
-            discoveryDocs: [GMAIL_CONFIG.discoveryDoc],
-            scope: GMAIL_CONFIG.scopes
-          })
+          // Carica Google Identity Services (NUOVA API)
+          await loadGoogleIdentityScript()
           
-          console.log('✅ Google API inizializzata')
-          setIsGapiLoaded(true)
+          // Inizializza Google API Client (per chiamate Gmail)
+          await loadGoogleAPIScript()
           
-          // Controlla se già autenticato
-          const authInstance = window.gapi.auth2.getAuthInstance()
-          console.log('🔧 Controllo autenticazione esistente...')
+          console.log('✅ Google Identity Services caricato')
+          setIsGoogleLoaded(true)
           
-          if (authInstance && authInstance.isSignedIn && authInstance.isSignedIn.get()) {
-            console.log('👤 Utente già autenticato')
-            const user = authInstance.currentUser.get()
-            const profile = user.getBasicProfile()
-            setUserProfile({
-              email: profile.getEmail(),
-              name: profile.getName(),
-              picture: profile.getImageUrl()
-            })
-            setIsAuthenticated(true)
-            await loadEmails()
-          } else {
-            console.log('👤 Nessun utente autenticato')
-          }
         } catch (error) {
-          console.error('❌ Errore inizializzazione completo:', error)
-          console.error('❌ Errore tipo:', typeof error)
-          console.error('❌ Errore keys:', Object.keys(error))
-          
-          // Gestione specifica degli errori Google API
-          let errorMessage = 'Errore inizializzazione'
-          
-          if (error && typeof error === 'object') {
-            if (error.error) {
-              errorMessage += `: ${error.error}`
-            } else if (error.details && error.details.error) {
-              errorMessage += `: ${error.details.error}`
-            } else if (error.message) {
-              errorMessage += `: ${error.message}`
-            } else {
-              // Per errori Google API specifici
-              errorMessage += ': Errore configurazione Google OAuth'
-            }
-          } else if (typeof error === 'string') {
-            errorMessage += `: ${error}`
-          }
-          
-          setAuthError(errorMessage)
+          console.error('❌ Errore caricamento Google Identity:', error)
+          setAuthError(`Errore caricamento: ${error.message}`)
         }
       }
     }
 
-    // Carica script Google API se non presente
-    if (!window.gapi) {
-      console.log('📥 Caricamento script Google API...')
-      const script = document.createElement('script')
-      script.src = 'https://apis.google.com/js/api.js'
-      script.onload = initializeGapi
-      script.onerror = () => {
-        console.error('❌ Errore caricamento script Google API')
-        setAuthError('Errore caricamento Google API')
-      }
-      document.body.appendChild(script)
-    } else {
-      initializeGapi()
-    }
+    initializeGoogleIdentity()
   }, [])
 
-  // AUTENTICAZIONE GMAIL - VERSIONE MIGLIORATA
+  // Carica script Google Identity Services
+  const loadGoogleIdentityScript = () => {
+    return new Promise((resolve, reject) => {
+      if (window.google?.accounts) {
+        resolve()
+        return
+      }
+
+      const script = document.createElement('script')
+      script.src = 'https://accounts.google.com/gsi/client'
+      script.onload = () => {
+        console.log('✅ Google Identity script caricato')
+        resolve()
+      }
+      script.onerror = reject
+      document.body.appendChild(script)
+    })
+  }
+
+  // Carica Google API Client per Gmail
+  const loadGoogleAPIScript = () => {
+    return new Promise((resolve, reject) => {
+      if (window.gapi) {
+        resolve()
+        return
+      }
+
+      const script = document.createElement('script')
+      script.src = 'https://apis.google.com/js/api.js'
+      script.onload = async () => {
+        console.log('✅ Google API script caricato')
+        
+        // Inizializza gapi
+        await new Promise((gapiResolve, gapiReject) => {
+          window.gapi.load('client', {
+            callback: gapiResolve,
+            onerror: gapiReject
+          })
+        })
+
+        await window.gapi.client.init({
+          apiKey: GOOGLE_CONFIG.apiKey,
+          discoveryDocs: GOOGLE_CONFIG.discoveryDocs
+        })
+        
+        console.log('✅ Google API Client inizializzato')
+        resolve()
+      }
+      script.onerror = reject
+      document.body.appendChild(script)
+    })
+  }
+
+  // AUTENTICAZIONE CON NUOVA API
   const handleGmailAuth = async () => {
-    console.log('🔐 Inizio autenticazione Gmail...')
+    console.log('🔐 Inizio autenticazione con Google Identity Services...')
     setIsLoading(true)
     setAuthError(null)
     
     try {
-      if (!isGapiLoaded) {
-        throw new Error('Google API non ancora caricata')
+      if (!isGoogleLoaded) {
+        throw new Error('Google Identity Services non ancora caricato')
       }
 
-      const authInstance = window.gapi.auth2.getAuthInstance()
-      if (!authInstance) {
-        throw new Error('Istanza auth2 non trovata')
-      }
+      // Configurazione token client (NUOVA API)
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CONFIG.clientId,
+        scope: GOOGLE_CONFIG.scope,
+        callback: async (response) => {
+          console.log('✅ Token ricevuto:', response)
+          
+          if (response.error) {
+            console.error('❌ Errore token:', response.error)
+            setAuthError(`Errore token: ${response.error}`)
+            setIsLoading(false)
+            return
+          }
 
-      console.log('🔐 Richiesta signin...')
-      const user = await authInstance.signIn({
-        prompt: 'consent'
+          // Salva access token
+          setAccessToken(response.access_token)
+          
+          // Ottieni info profilo utente
+          try {
+            const profileResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+              headers: {
+                'Authorization': `Bearer ${response.access_token}`
+              }
+            })
+            
+            const profileData = await profileResponse.json()
+            console.log('👤 Profilo utente:', profileData)
+            
+            setUserProfile({
+              email: profileData.email,
+              name: profileData.name,
+              picture: profileData.picture
+            })
+            
+            setIsAuthenticated(true)
+            await loadEmails(response.access_token)
+            
+          } catch (profileError) {
+            console.error('❌ Errore caricamento profilo:', profileError)
+            setAuthError('Errore caricamento profilo utente')
+          }
+          
+          setIsLoading(false)
+        }
       })
-      
-      console.log('✅ Signin completato')
-      const profile = user.getBasicProfile()
-      const userInfo = {
-        email: profile.getEmail(),
-        name: profile.getName(),
-        picture: profile.getImageUrl()
-      }
-      
-      console.log('👤 Profilo utente:', userInfo)
-      setUserProfile(userInfo)
-      setIsAuthenticated(true)
-      
-      await loadEmails()
+
+      // Richiedi token
+      client.requestAccessToken({ prompt: 'consent' })
       
     } catch (error) {
       console.error('❌ Errore autenticazione:', error)
-      
-      // Errori specifici
-      if (error.error === 'popup_closed_by_user') {
-        setAuthError('Popup chiuso dall\'utente')
-      } else if (error.error === 'access_denied') {
-        setAuthError('Accesso negato')
-      } else {
-        setAuthError(`Errore: ${error.message || error.error || 'Errore sconosciuto'}`)
-      }
-    } finally {
+      setAuthError(`Errore autenticazione: ${error.message}`)
       setIsLoading(false)
     }
   }
 
-  // CARICAMENTO EMAIL - VERSIONE MIGLIORATA
-  const loadEmails = async () => {
+  // CARICAMENTO EMAIL CON NUOVA API
+  const loadEmails = async (token = accessToken) => {
     console.log('📧 Caricamento email...')
     try {
       setIsLoading(true)
+      
+      if (!token) {
+        throw new Error('Access token mancante')
+      }
+
+      // Configura headers per Gmail API
+      window.gapi.client.setApiKey(GOOGLE_CONFIG.apiKey)
+      window.gapi.client.setToken({ access_token: token })
       
       // Query dinamica basata sul periodo selezionato
       let query = ''
@@ -407,7 +405,6 @@ const EmailDecisionExtractor = () => {
     const dateValue = getHeader('Date')
     const parsedDate = dateValue ? new Date(dateValue) : new Date(parseInt(emailData.internalDate))
     
-    // Estrai nome e email del mittente
     const fromHeader = getHeader('From')
     const senderMatch = fromHeader.match(/^(.+?)\s*<(.+?)>$/) || fromHeader.match(/^(.+)$/)
     const senderName = senderMatch ? senderMatch[1]?.replace(/"/g, '').trim() : fromHeader
@@ -426,7 +423,6 @@ const EmailDecisionExtractor = () => {
       isUnread: emailData.labelIds?.includes('UNREAD') || false,
       isImportant: emailData.labelIds?.includes('IMPORTANT') || false,
       body: extractEmailBody(emailData.payload),
-      // Analisi AI simulata per ora
       priority: Math.random() > 0.7 ? 'high' : Math.random() > 0.4 ? 'medium' : 'low',
       decision: extractDecisionFromEmail(emailData.snippet, getHeader('Subject')),
       status: Math.random() > 0.6 ? 'decided' : Math.random() > 0.3 ? 'pending_confirmation' : 'in_progress',
@@ -435,7 +431,6 @@ const EmailDecisionExtractor = () => {
     }
   }
 
-  // ESTRAZIONE CORPO EMAIL (stesso di prima)
   const extractEmailBody = (payload) => {
     let body = ''
     
@@ -453,7 +448,6 @@ const EmailDecisionExtractor = () => {
     return body.substring(0, 500)
   }
 
-  // ESTRAZIONE DECISIONI (stesso di prima)
   const extractDecisionFromEmail = (snippet, subject) => {
     const decisionKeywords = [
       'approv', 'decid', 'confirm', 'budget', 'assun', 'contratt', 'accord', 'procedi',
@@ -470,7 +464,6 @@ const EmailDecisionExtractor = () => {
     return null
   }
 
-  // FILTRO EMAIL (stesso di prima)
   const filterEmails = (emails) => {
     let filtered = emails.filter(email => {
       if (selectedPerson && !email.sender.toLowerCase().includes(selectedPerson.toLowerCase())) {
@@ -489,38 +482,35 @@ const EmailDecisionExtractor = () => {
       }
     })
     
-    // Solo email con decisioni identificate
     filtered = filtered.filter(email => email.decision)
-    
     setFilteredEmails(filtered)
   }
 
-  // AGGIORNA FILTRI (stesso di prima)
   useEffect(() => {
     if (realEmails.length > 0) {
       filterEmails(realEmails)
     }
   }, [selectedPerson, selectedStatus, realEmails])
 
-  // RICARICA EMAIL QUANDO CAMBIA PERIODO (stesso di prima)
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && accessToken) {
       loadEmails()
     }
   }, [selectedPeriod])
 
-  // DISCONNESSIONE (stesso di prima)
   const handleDisconnect = () => {
-    if (window.gapi?.auth2) {
-      window.gapi.auth2.getAuthInstance().signOut()
-      setIsAuthenticated(false)
-      setUserProfile(null)
-      setRealEmails([])
-      setFilteredEmails([])
+    if (window.google?.accounts?.oauth2) {
+      window.google.accounts.oauth2.revoke(accessToken, () => {
+        console.log('✅ Token revocato')
+      })
     }
+    setIsAuthenticated(false)
+    setUserProfile(null)
+    setAccessToken(null)
+    setRealEmails([])
+    setFilteredEmails([])
   }
 
-  // GENERA RISPOSTA AI (stesso di prima)
   const generateReply = (email) => {
     setIsGeneratingReply(true)
     
@@ -541,7 +531,6 @@ ${userProfile?.name || 'Sergio'}`
     }, 2000)
   }
 
-  // UTILITY FUNCTIONS (stesso di prima)
   const getPriorityColor = (priority) => {
     switch(priority) {
       case 'high': return 'text-red-600 bg-red-50'
@@ -560,7 +549,7 @@ ${userProfile?.name || 'Sergio'}`
     }
   }
 
-  // COMPONENTE AUTENTICAZIONE GMAIL - VERSIONE MIGLIORATA
+  // COMPONENTE AUTENTICAZIONE GMAIL
   const GmailAuthCard = () => {
     if (isAuthenticated && userProfile) {
       return (
@@ -628,17 +617,17 @@ ${userProfile?.name || 'Sergio'}`
         
         <h3 className="text-lg font-semibold text-gray-900 mb-2">
           {isLoading ? t.authInProgress : 
-           !isGapiLoaded ? t.loadingGoogleApi : 
+           !isGoogleLoaded ? t.loadingGoogleApi : 
            t.connectGmail}
         </h3>
         
         <p className="text-gray-600 text-sm mb-6">
-          Connessione sicura OAuth2 per analizzare le tue email
+          Connessione sicura con Google Identity Services (Nuova API)
         </p>
         
         <button
           onClick={handleGmailAuth}
-          disabled={isLoading || !isGapiLoaded}
+          disabled={isLoading || !isGoogleLoaded}
           className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 mx-auto"
         >
           {isLoading ? (
@@ -646,7 +635,7 @@ ${userProfile?.name || 'Sergio'}`
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
               <span>{t.authInProgress}</span>
             </>
-          ) : !isGapiLoaded ? (
+          ) : !isGoogleLoaded ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
               <span>{t.loadingGoogleApi}</span>
@@ -663,12 +652,12 @@ ${userProfile?.name || 'Sergio'}`
           <p>{t.readOnlyAccess}</p>
           <p>{t.noServerStorage}</p>
           <p>{t.endToEndEncryption}</p>
+          <p>✓ Nuova Google Identity Services API</p>
         </div>
       </div>
     )
   }
 
-  // RENDER PRINCIPALE (stesso di prima, ma con controlli migliorati)
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -680,7 +669,6 @@ ${userProfile?.name || 'Sergio'}`
               <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
             </div>
             <div className="flex items-center space-x-4">
-              {/* Language Selector */}
               <div className="flex items-center space-x-2">
                 <select 
                   value={selectedLanguage}
@@ -716,12 +704,10 @@ ${userProfile?.name || 'Sergio'}`
       <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
-          {/* Sidebar - Filtri */}
+          {/* Sidebar */}
           <div className="lg:col-span-1">
-            {/* Gmail Auth Card */}
             <GmailAuthCard />
             
-            {/* Filtri solo se autenticato */}
             {isAuthenticated && (
               <div className="bg-white rounded-lg shadow p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
@@ -729,7 +715,6 @@ ${userProfile?.name || 'Sergio'}`
                   {t.analysisFilters}
                 </h3>
                 
-                {/* Filtro Periodo */}
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t.period}</label>
                   <div className="space-y-1">
@@ -761,7 +746,6 @@ ${userProfile?.name || 'Sergio'}`
                   </div>
                 </div>
 
-                {/* Filtro per Persona */}
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t.fromSpecificPerson}</label>
                   <input
@@ -773,7 +757,6 @@ ${userProfile?.name || 'Sergio'}`
                   />
                 </div>
 
-                {/* Filtro Status Email */}
                 <div className="mb-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t.emailStatus}</label>
                   <div className="space-y-2">
@@ -911,7 +894,7 @@ ${userProfile?.name || 'Sergio'}`
                 </div>
               </div>
             ) : (
-              /* Vista dettaglio email - stesso di prima */
+              /* Vista dettaglio email */
               <div className="bg-white rounded-lg shadow">
                 <div className="p-6 border-b border-gray-200">
                   <div className="flex items-center justify-between mb-4">
@@ -957,7 +940,7 @@ ${userProfile?.name || 'Sergio'}`
           </div>
         </div>
 
-        {/* Modal per generazione risposta - stesso di prima */}
+        {/* Modal per generazione risposta */}
         {isGeneratingReply && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
@@ -970,7 +953,7 @@ ${userProfile?.name || 'Sergio'}`
           </div>
         )}
 
-        {/* Modal risposta generata - stesso di prima */}
+        {/* Modal risposta generata */}
         {replyText && !isGeneratingReply && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
