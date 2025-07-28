@@ -209,7 +209,9 @@ const EmailDecisionExtractor = () => {
           
           // Controlla se già autenticato
           const authInstance = window.gapi.auth2.getAuthInstance()
-          if (authInstance && authInstance.isSignedIn.get()) {
+          console.log('🔧 Controllo autenticazione esistente...')
+          
+          if (authInstance && authInstance.isSignedIn && authInstance.isSignedIn.get()) {
             console.log('👤 Utente già autenticato')
             const user = authInstance.currentUser.get()
             const profile = user.getBasicProfile()
@@ -220,19 +222,30 @@ const EmailDecisionExtractor = () => {
             })
             setIsAuthenticated(true)
             await loadEmails()
+          } else {
+            console.log('👤 Nessun utente autenticato')
           }
         } catch (error) {
           console.error('❌ Errore inizializzazione completo:', error)
-          console.error('❌ Errore message:', error.message)
-          console.error('❌ Errore stack:', error.stack)
+          console.error('❌ Errore tipo:', typeof error)
+          console.error('❌ Errore keys:', Object.keys(error))
           
+          // Gestione specifica degli errori Google API
           let errorMessage = 'Errore inizializzazione'
-          if (error.message) {
-            errorMessage += `: ${error.message}`
-          } else if (error.error) {
-            errorMessage += `: ${error.error}`
-          } else {
-            errorMessage += ': Errore sconosciuto durante il caricamento Google API'
+          
+          if (error && typeof error === 'object') {
+            if (error.error) {
+              errorMessage += `: ${error.error}`
+            } else if (error.details && error.details.error) {
+              errorMessage += `: ${error.details.error}`
+            } else if (error.message) {
+              errorMessage += `: ${error.message}`
+            } else {
+              // Per errori Google API specifici
+              errorMessage += ': Errore configurazione Google OAuth'
+            }
+          } else if (typeof error === 'string') {
+            errorMessage += `: ${error}`
           }
           
           setAuthError(errorMessage)
