@@ -161,10 +161,16 @@ const EmailDecisionExtractor = () => {
       console.log('🔧 Inizializzazione Google API...')
       console.log('Client ID:', GMAIL_CONFIG.clientId)
       console.log('API Key:', GMAIL_CONFIG.apiKey ? 'Present' : 'Missing')
+      console.log('Client ID completo:', process.env.NEXT_PUBLIC_GMAIL_CLIENT_ID)
+      console.log('API Key completo:', process.env.NEXT_PUBLIC_GMAIL_API_KEY)
       
       if (!GMAIL_CONFIG.clientId || !GMAIL_CONFIG.apiKey) {
-        console.error('❌ Credenziali Google mancanti')
-        setAuthError(t.configError)
+        const missingCredentials = []
+        if (!GMAIL_CONFIG.clientId) missingCredentials.push('Client ID')
+        if (!GMAIL_CONFIG.apiKey) missingCredentials.push('API Key')
+        
+        console.error('❌ Credenziali Google mancanti:', missingCredentials.join(', '))
+        setAuthError(`Credenziali mancanti: ${missingCredentials.join(', ')}`)
         return
       }
 
@@ -203,8 +209,22 @@ const EmailDecisionExtractor = () => {
             await loadEmails()
           }
         } catch (error) {
-          console.error('❌ Errore inizializzazione:', error)
-          setAuthError(`Errore inizializzazione: ${error.message || error}`)
+          console.error('❌ Errore inizializzazione completo:', error)
+          console.error('❌ Errore message:', error.message)
+          console.error('❌ Errore details:', JSON.stringify(error))
+          
+          let errorMessage = 'Errore inizializzazione'
+          if (error.message) {
+            errorMessage += `: ${error.message}`
+          } else if (error.error) {
+            errorMessage += `: ${error.error}`
+          } else if (error.details) {
+            errorMessage += `: ${error.details}`
+          } else {
+            errorMessage += `: ${typeof error === 'string' ? error : 'Errore sconosciuto'}`
+          }
+          
+          setAuthError(errorMessage)
         }
       }
     }
